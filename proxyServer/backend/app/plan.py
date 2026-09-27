@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 class Plan(BaseModel):
     model_config = ConfigDict(strict=True, frozen=True)
 
+    classId: int
     label: str
     start_at: int
     end_at: int
