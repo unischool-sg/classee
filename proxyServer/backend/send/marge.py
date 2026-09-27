@@ -2,7 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
-def start_ffmpeg(rtsp_url: str, audio_device: str, output_dir: Path, output_file_pattern: str, segment_time: int) -> subprocess.Popen:
+def start_ffmpeg(rtsp_url: str, audio_device: str, output_dir: Path,
+                 output_file_pattern: str, segment_time: int, duration: int) -> subprocess.Popen:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return subprocess.Popen([
@@ -19,6 +20,7 @@ def start_ffmpeg(rtsp_url: str, audio_device: str, output_dir: Path, output_file
         "-map", "1:a:0",
         "-c:v", "copy",
         "-c:a", "aac", "-b:a", "128k",
+        "-t", str(duration),
         "-f", "segment",
         "-segment_time", str(segment_time),
         "-segment_format", "mp4",
@@ -27,5 +29,4 @@ def start_ffmpeg(rtsp_url: str, audio_device: str, output_dir: Path, output_file
         "-strftime", "1",
         "-flush_packets", "1",
         str(output_dir / output_file_pattern),
-    ]
-    )
+    ])
