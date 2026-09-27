@@ -11,24 +11,23 @@ import os
 
 load_dotenv(dotenv_path=Path("../.env"))
 
-rtsp_url = os.getenv("RTSP_URL")
-audio_device = os.getenv("AUDIO_DEVICE")
-output_dir = Path(os.getenv("OUTPUT_DIR"))
-output_file_pattern = os.getenv("OUTPUT_FILE_PATTERN")
-segment_time = int(os.getenv("SEGMENT_TIME"))
-reconnect_delay = int(os.getenv("RECONNECT_DELAY_MAX", "5"))
-api_host = os.getenv("API_HOST")
-api_token = os.getenv("API_TOKEN")
-verify_path = Path(os.getenv("VERIFY_PATH"))
+RTSP_URL = os.getenv("RTSP_URL")
+AUDIO_DEVICE = os.getenv("AUDIO_DEVICE")
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR"))
+OUTPUT_FILE_PATTERN = os.getenv("OUTPUT_FILE_PATTERN")
+SEGMENT_TIME = int(os.getenv("SEGMENT_TIME"))
+RECONNECT_DELAY = int(os.getenv("RECONNECT_DELAY_MAX", "5"))
+API_HOST = os.getenv("API_HOST")
+API_TOKEN = os.getenv("API_TOKEN")
+VERIFY_PATH = Path(os.getenv("VERIFY_PATH"))
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "60"))
+SEND_RETRY = int(os.getenv("SEND_RETRY", "3"))
 
-POLL_INTERVAL = 60
-SEND_RETRY = 3
 
-
-def record(plan: Plan, plan_dir: Path) -> None:
+def record_until_end(plan: Plan, plan_dir: Path) -> None:
     while (remaining := plan.end_at - int(time.time())) > 0:
-        process = start_ffmpeg(rtsp_url, audio_device, plan_dir,
-                               output_file_pattern, segment_time, remaining)
+        process = start_ffmpeg(RTSP_URL, AUDIO_DEVICE, plan_dir,
+                               OUTPUT_FILE_PATTERN, SEGMENT_TIME, remaining)
         try:
             process.wait(timeout=remaining + 30)
         except subprocess.TimeoutExpired:
@@ -37,19 +36,19 @@ def record(plan: Plan, plan_dir: Path) -> None:
 
         if plan.end_at - int(time.time()) > 0:
             print("ffmpeg process exited. Restarting...")
-            time.sleep(reconnect_delay)
+            time.sleep(RECONNECT_DELAY)
 
 
-def send_and_clean(plan: Plan, plan_dir: Path) -> None:
+def send_videos_and_cleanup(plan: Plan, plan_dir: Path) -> None:
     for video_path in sorted(plan_dir.glob("*.mp4")):
         for attempt in range(1, SEND_RETRY + 1):
             try:
-                send_video(api_token, plan.classId, plan.label, video_path, api_host, verify_path)
+                send_video(API_TOKEN, plan.classId, plan.label, video_path, API_HOST, VERIFY_PATH)
                 remove_video(video_path)
                 break
             except Exception as e:
                 print(f"send failed ({attempt}/{SEND_RETRY}): {video_path}: {e}")
-                time.sleep(reconnect_delay)
+                time.sleep(RECONNECT_DELAY)
     remove_dir_if_empty(plan_dir)
 
 
@@ -60,7 +59,7 @@ def seconds_until_tomorrow() -> float:
 
 while True:
     try:
-        plans = get_today_schedule(api_token, verify_path, api_host)
+        plans = get_today_schedule(API_TOKEN, VERIFY_PATH, API_HOST)
     except Exception as e:
         print(f"failed to get schedule: {e}")
         time.sleep(POLL_INTERVAL)
@@ -78,8 +77,8 @@ while True:
         time.sleep(min(plan.start_at - now, POLL_INTERVAL))
         continue
 
-    plan_dir = output_dir / f"{plan.classId}_{plan.start_at}"
+    plan_dir = OUTPUT_DIR / f"{plan.classId}_{plan.start_at}"
     print(f"recording start: {plan.label} ({plan.classId})")
-    record(plan, plan_dir)
+    record_until_end(plan, plan_dir)
     print(f"recording end: {plan.label} ({plan.classId})")
-    send_and_clean(plan, plan_dir)
+    send_videos_and_cleanup(plan, plan_dir)
