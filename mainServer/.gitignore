@@ -1,3 +1,4 @@
 postgres/.env
+rustfs/.env
 backend/.venv/
 backend/.env
