@@ -11,17 +11,17 @@ import os
 
 load_dotenv(dotenv_path=Path("../.env"))
 
-RTSP_URL = os.getenv("RTSP_URL")
-AUDIO_DEVICE = os.getenv("AUDIO_DEVICE")
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR"))
-OUTPUT_FILE_PATTERN = os.getenv("OUTPUT_FILE_PATTERN")
-SEGMENT_TIME = int(os.getenv("SEGMENT_TIME"))
-RECONNECT_DELAY = int(os.getenv("RECONNECT_DELAY_MAX", "5"))
-API_HOST = os.getenv("API_HOST")
-API_TOKEN = os.getenv("API_TOKEN")
-VERIFY_PATH = Path(os.getenv("VERIFY_PATH"))
-POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "60"))
-SEND_RETRY = int(os.getenv("SEND_RETRY", "3"))
+RTSP_URL = os.environ.get("RTSP_URL")
+AUDIO_DEVICE = os.environ.get("AUDIO_DEVICE")
+OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR"))
+OUTPUT_FILE_PATTERN = os.environ.get("OUTPUT_FILE_PATTERN")
+SEGMENT_TIME = int(os.environ.get("SEGMENT_TIME"))
+RECONNECT_DELAY = int(os.environ.get("RECONNECT_DELAY_MAX", "5"))
+API_HOST = os.environ.get("API_HOST")
+API_TOKEN = os.environ.get("API_TOKEN")
+VERIFY_PATH = Path(os.environ.get("VERIFY_PATH"))
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
+SEND_RETRY = int(os.environ.get("SEND_RETRY", "3"))
 
 
 def record_until_end(plan: Plan, plan_dir: Path) -> None:
