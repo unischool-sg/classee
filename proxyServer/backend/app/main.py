@@ -43,7 +43,7 @@ def send_videos_and_cleanup(plan: Plan, plan_dir: Path) -> None:
     for video_path in sorted(plan_dir.glob("*.mp4")):
         for attempt in range(1, SEND_RETRY + 1):
             try:
-                send_video(API_TOKEN, plan.classId, plan.label, video_path, API_HOST, VERIFY_PATH)
+                send_video(API_TOKEN, plan.classId, video_path, API_HOST, VERIFY_PATH)
                 remove_video(video_path)
                 break
             except Exception as e:
