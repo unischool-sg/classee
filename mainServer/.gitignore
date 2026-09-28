@@ -1,5 +1,3 @@
 postgres/.env
-backend/camera/.venv/
-backend/camera/.env
-backend/teacher/.venv/
-backend/teacher/.env
+backend/.venv/
+backend/.env
