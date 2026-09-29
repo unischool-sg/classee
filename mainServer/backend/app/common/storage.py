@@ -4,9 +4,9 @@ from pathlib import Path
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
-from dotenv import load_dotenv
+from dotenv_fixed import load_dotenv
 
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / "../../.env")
+load_dotenv(dotenv_fixed_path=Path("../.env"))
 
 s3_client = boto3.client(
     "s3",
