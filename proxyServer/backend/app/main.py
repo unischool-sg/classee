@@ -9,7 +9,7 @@ import subprocess
 import time
 import os
 
-load_dotenv(dotenv_path=Path("../.env"))
+load_dotenv(dotenv_fixed_path=Path("../.env"))
 
 RTSP_URL = os.environ.get("RTSP_URL")
 AUDIO_DEVICE = os.environ.get("AUDIO_DEVICE")
