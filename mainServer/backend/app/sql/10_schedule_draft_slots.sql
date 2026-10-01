@@ -3,8 +3,6 @@
 CREATE TABLE schedule_draft_slots (
     id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     classroom_id  bigint      NOT NULL REFERENCES classrooms(id),
-    month         date        NOT NULL CHECK (EXTRACT(DAY FROM month) = 1),  -- その月の1日
-    period        smallint,
     starts_at     timestamptz NOT NULL,
     ends_at       timestamptz NOT NULL,
     note          text,

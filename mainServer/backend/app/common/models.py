@@ -15,3 +15,10 @@ class Slot:
     starts_at: datetime
     ends_at: datetime
 
+
+@dataclass(frozen=True)
+class DraftSlot:
+    id: int
+    starts_at: datetime
+    ends_at: datetime
+    note: str | None
