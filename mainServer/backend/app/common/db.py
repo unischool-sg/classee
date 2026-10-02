@@ -59,20 +59,22 @@ def edit_draft_slots(conn, edits: list[DraftSlot]) -> None:
             "FROM (VALUES %s) AS data(id, starts_at, ends_at, note) "
             "WHERE d.id = data.id "
             "RETURNING d.id",
-            [(e.id, e.slot.starts_at, e.slot.ends_at, e.note) for e in edits]
+            [(e.id, e.slot.starts_at, e.slot.ends_at, e.note) for e in edits],
+            fetch=True,
         )
     if len(updated) != len(edits):
         raise ValueError(f"{len(edits) - len(updated)} draft slots not found for editing notes")
 
 def delete_draft_slots(conn, deletes: list[DraftSlot]) -> None:
     with conn.cursor() as cur:
-        execute_values(
+        updated = execute_values(
             cur,
             "DELETE FROM schedule_draft_slots WHERE id = ANY(%s)",
             ( [d.id for d in deletes], ),
+            fetch=True
         )
-    if cur.rowcount != len(deletes):
-        raise ValueError(f"{len(deletes) - cur.rowcount} draft slots not found for deletion")
+    if len(updated) != len(deletes):
+        raise ValueError(f"{len(deletes) - len(updated)} draft slots not found for deletion")
 
 def get_confirmed_slots(conn, classroom_id: int, start: datetime, end: datetime) -> list[Slot]:
     with conn.cursor() as cur:
@@ -91,11 +93,11 @@ def edit_confirmed_slots(conn, classroom_id: int, edits: list[Slot]) -> None:
         updated = execute_values(
             cur,
             "UPDATE schedule_slots AS s SET starts_at = data.starts_at, ends_at = data.ends_at "
-            "FROM (VALUES %s) AS data(period, starts_at, ends_at) "
-            "WHERE s.classroom_id = %s AND s.period = data.period "
+            "FROM (VALUES %s) AS data(classroom_id, period, starts_at, ends_at) "
+            "WHERE s.classroom_id = data.classroom_id AND s.period = data.period "
             "RETURNING s.period",
-            [(e.period, e.starts_at, e.ends_at) for e in edits],
-            template="(%s, %s, %s)"
+            [(classroom_id, e.period, e.starts_at, e.ends_at) for e in edits],
+            fetch=True,
         )
     if len(updated) != len(edits):
         raise ValueError(f"{len(edits) - len(updated)} confirmed slots not found for editing")
