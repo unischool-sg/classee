@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, model_validator
 
-from camera.auth import verify_token
-from common.schedule import get_schedule
+from camera.auth import verify_device
+from common.db import conn, get_device_plans, set_actor_device, touch_device
+from common.models import Device, Plan
 
 router = APIRouter()
 
@@ -21,18 +22,16 @@ class ScheduleRequest(BaseModel):
         return self
 
 
-class Plan(BaseModel):
-    classId: int
-    start_at: int
-    end_at: int
+def _get_schedule(device: Device, start_at: int, end_at: int) -> list[Plan]:
+    with conn:
+        set_actor_device(conn, device.id)
+        touch_device(conn, device.id)
+        return get_device_plans(conn, device, start_at, end_at)
 
 
 @router.post("/api/schedule", response_model=list[Plan])
 async def schedule(
     body: ScheduleRequest,
-    token: Annotated[str, Depends(verify_token)],
+    device: Annotated[Device, Depends(verify_device)],
 ):
-    try:
-        return await run_in_threadpool(get_schedule, token, body.start_at, body.end_at)
-    except PermissionError as e:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
+    return await run_in_threadpool(_get_schedule, device, body.start_at, body.end_at)

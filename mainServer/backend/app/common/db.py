@@ -6,7 +6,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 import psycopg2
 from psycopg2.extras import execute_values
-from models import Slot, DraftSlot, ConfirmedSlot
+from models import Slot, DraftSlot, ConfirmedSlot, Device, Plan
 
 load_dotenv(dotenv_fixed_path=Path("../.env"))
 
@@ -146,3 +146,53 @@ def confirm_month(conn, classroom_id: int, year: int, month: int, user_id: int) 
             (classroom_id, start, end, user_id),
         )
         return cur.rowcount
+
+def set_actor_device(conn, device_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT set_config('app.device_id', %s, true)", (str(device_id),))
+
+def get_device_by_token_hash(conn, token_hash: str) -> Device | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, classroom_id FROM devices WHERE token_hash = %s AND revoked_at IS NULL",
+            (token_hash,),
+        )
+        row = cur.fetchone()
+    return Device(id=row[0], classroom_id=row[1]) if row else None
+
+def touch_device(conn, device_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute("UPDATE devices SET last_seen_at = now() WHERE id = %s", (device_id,))
+
+def get_device_plans(conn, device: Device, start_at: int, end_at: int) -> list[Plan]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, EXTRACT(EPOCH FROM starts_at)::bigint, EXTRACT(EPOCH FROM ends_at)::bigint "
+            "FROM schedule_slots "
+            "WHERE classroom_id = %s AND cancelled_at IS NULL "
+            "AND starts_at >= to_timestamp(%s) AND starts_at < to_timestamp(%s) ORDER BY starts_at",
+            (device.classroom_id, start_at, end_at),
+        )
+        return [Plan(classId=i, start_at=s, end_at=e) for i, s, e in cur.fetchall()]
+
+def check_device_slot(conn, device: Device, slot_id: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM schedule_slots "
+            "WHERE id = %s AND classroom_id = %s AND cancelled_at IS NULL AND starts_at <= now()",
+            (slot_id, device.classroom_id),
+        )
+        return cur.fetchone() is not None
+
+def add_recording(conn, slot_id: int, device: Device, file_name: str, object_key: str,
+                  size_bytes: int, sha256: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO recordings (slot_id, device_id, file_name, object_key, size_bytes, sha256) "
+            "VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (slot_id, file_name) DO UPDATE SET "
+            "device_id = EXCLUDED.device_id, object_key = EXCLUDED.object_key, "
+            "size_bytes = EXCLUDED.size_bytes, sha256 = EXCLUDED.sha256, "
+            "uploaded_at = now(), deleted_at = NULL",
+            (slot_id, device.id, file_name, object_key, size_bytes, sha256),
+        )

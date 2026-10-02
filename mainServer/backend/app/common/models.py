@@ -31,3 +31,16 @@ class ConfirmedSlot:
     starts_at: datetime
     ends_at: datetime
     note: str | None
+
+
+@dataclass(frozen=True)
+class Device:
+    id: int
+    classroom_id: int
+
+
+@dataclass(frozen=True)
+class Plan:
+    classId: int
+    start_at: int
+    end_at: int
