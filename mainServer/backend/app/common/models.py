@@ -22,3 +22,12 @@ class DraftSlot:
     starts_at: datetime
     ends_at: datetime
     note: str | None
+
+
+@dataclass(frozen=True)
+class ConfirmedSlot:
+    id: int
+    period: int | None
+    starts_at: datetime
+    ends_at: datetime
+    note: str | None

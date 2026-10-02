@@ -12,8 +12,6 @@ CREATE TABLE schedule_draft_slots (
     CHECK ((starts_at AT TIME ZONE 'Asia/Tokyo')::time >= time '07:00'),
     CHECK ((ends_at   AT TIME ZONE 'Asia/Tokyo')::time <= time '19:00'),
     CHECK ((starts_at AT TIME ZONE 'Asia/Tokyo')::date = (ends_at AT TIME ZONE 'Asia/Tokyo')::date),
-    -- コマはその下書きの月の中だけ
-    CHECK (date_trunc('month', starts_at AT TIME ZONE 'Asia/Tokyo')::date = month),
     UNIQUE (classroom_id, starts_at),
     EXCLUDE USING gist (classroom_id WITH =, tstzrange(starts_at, ends_at) WITH &&)
 );
