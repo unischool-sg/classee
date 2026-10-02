@@ -114,7 +114,6 @@ def edit_confirmed_slots(conn, edits: list[ConfirmedSlot]) -> None:
     if len(updated) != len(edits):
         raise ValueError(f"{len(edits) - len(updated)} confirmed slots not found for editing")
 
-# schedule_slots は行を消さない（DELETE 権限もない）。取り消しは cancelled_at / cancelled_by を埋める
 def cancel_confirmed_slots(conn, cancels: list[ConfirmedSlot], user_id: int) -> None:
     with conn.cursor() as cur:
         cur.execute(
