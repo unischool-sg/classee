@@ -1,4 +1,3 @@
-postgres/.env
-rustfs/.env
-backend/.venv/
-backend/.env
+**/.env
+**/.venv/
+**/__pycache__/
