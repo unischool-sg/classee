@@ -1,3 +1,4 @@
+import secrets
 import subprocess
 from pathlib import Path
 import hashlib
@@ -33,3 +34,11 @@ def check_video(path: Path, expected_sha256: str) -> str:
     check_video_sha256(path, expected_sha256)
     probe_video(path)
     return mime
+
+def gen_camera_token() -> str:
+    token = secrets.token_urlsafe(32)
+    return token
+
+def check_camera_token(token: str, classroom_id: int) -> bool:
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return False  # Placeholder - replace with actual implementation

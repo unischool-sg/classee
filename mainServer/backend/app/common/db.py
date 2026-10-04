@@ -1,3 +1,4 @@
+import hashlib
 import os
 from pathlib import Path
 from dotenv_fixed import load_dotenv
@@ -7,23 +8,6 @@ from zoneinfo import ZoneInfo
 import psycopg2
 from psycopg2.extras import execute_values
 from models import Slot, DraftSlot, ConfirmedSlot, Device, Plan
-
-load_dotenv(dotenv_fixed_path=Path("../.env"))
-
-DB_NAME = os.environ.get("DB_NAME")
-DB_USER = os.environ.get("DB_USER")
-DB_PASSWORD = os.environ.get("DB_PASSWORD")
-DB_HOST = os.environ.get("DB_HOST")
-DB_PORT = os.environ.get("DB_PORT", "5432")
-TZ = ZoneInfo("Asia/Tokyo")
-
-conn = psycopg2.connect(
-    dbname=DB_NAME,
-    user=DB_USER,
-    password=DB_PASSWORD,
-    host=DB_HOST,
-    port=DB_PORT
-)
 
 def _month_range(year: int, month: int) -> tuple[datetime, datetime]:
     start = datetime(year, month, 1, tzinfo=TZ)
@@ -145,6 +129,8 @@ def confirm_month(conn, classroom_id: int, year: int, month: int, user_id: int) 
             "SELECT classroom_id, starts_at, ends_at, note, %s FROM moved",
             (classroom_id, start, end, user_id),
         )
+        if cur.rowcount == 0:
+            raise ValueError("on confrict")
         return cur.rowcount
 
 def set_actor_device(conn, device_id: int) -> None:
