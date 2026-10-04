@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv_fixed import load_dotenv
 from psycopg2.extras import execute_values
+from psycopg2.extensions import connection
 from psycopg2.pool import ThreadedConnectionPool
 
 from common.models import Slot, DraftSlot, Device, Plan
@@ -15,8 +16,6 @@ load_dotenv(dotenv_fixed_path=Path("../.env"))
 
 TZ = ZoneInfo("Asia/Tokyo")
 
-# camera と teacher は別の DB ユーザー（classee_camera_api / classee_staff_api）で動かす。
-# どちらでつなぐかは、それぞれの .env の DB_USER / DB_PASSWORD で決める
 pool = ThreadedConnectionPool(
     minconn=1,
     maxconn=int(os.environ.get("DB_POOL_MAX", "10")),
@@ -27,19 +26,22 @@ pool = ThreadedConnectionPool(
     port=os.environ.get("DB_PORT", "5432"),
 )
 
-
-# プールから接続を借りて1つのトランザクションにする。成功で commit、例外で rollback。
-# 監査トリガーのために、誰の操作か（user_id か device_id）を最初に渡す
 @contextmanager
-def transaction(*, user_id: int | None = None, device_id: int | None = None) -> Iterator:
+def read() -> Iterator[connection]:
+    conn = pool.getconn()
+    try:
+        with conn:
+            yield conn
+    finally:
+        pool.putconn(conn, close=bool(conn.closed))
+
+@contextmanager
+def write(setting: str, value: str) -> Iterator[connection]:
     conn = pool.getconn()
     try:
         with conn:
             with conn.cursor() as cur:
-                if user_id is not None:
-                    cur.execute("SELECT set_config('app.user_id', %s, true)", (str(user_id),))
-                if device_id is not None:
-                    cur.execute("SELECT set_config('app.device_id', %s, true)", (str(device_id),))
+                cur.execute("SELECT set_config(%s, %s, true)", (setting, value))
             yield conn
     finally:
         pool.putconn(conn, close=bool(conn.closed))
@@ -153,7 +155,6 @@ def confirm_month(conn, classroom_id: int, year: int, month: int, user_id: int) 
             "ON CONFLICT DO NOTHING",
             (classroom_id, first, user_id),
         )
-        # 2回目の確定（上書きにするか）は未決なので、いまは断る。移す件数は0でもよい（夏休みなど）
         if cur.rowcount == 0:
             raise ValueError(f"{year}-{month:02d} is already confirmed")
         cur.execute(

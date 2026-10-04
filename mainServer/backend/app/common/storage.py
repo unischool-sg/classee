@@ -17,8 +17,7 @@ s3_client = boto3.client(
     region_name="us-east-1",
 )
 BUCKET_NAME = os.environ["BUCKET_NAME"]
-# 録画機は5分ごとのファイルを送る。映像は再エンコードせずそのまま（-c:v copy）なので、
-# カメラのビットレートで大きさが決まる。既定の 1GiB は5分で約 28Mbps まで
+# 録画機の5分のファイル（-c:v copy）で約 28Mbps まで
 MAX_VIDEO_SIZE = int(os.environ.get("MAX_VIDEO_SIZE", str(1024 * 1024 * 1024)))
 
 

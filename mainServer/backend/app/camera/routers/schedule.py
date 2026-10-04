@@ -5,7 +5,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, model_validator
 
 from camera.auth import verify_device
-from common.db import get_device_plans, touch_device, transaction
+from common.db import get_device_plans, touch_device, write
 from common.models import Device, Plan
 
 router = APIRouter()
@@ -23,7 +23,7 @@ class ScheduleRequest(BaseModel):
 
 
 def _get_schedule(device: Device, start_at: int, end_at: int) -> list[Plan]:
-    with transaction(device_id=device.id) as conn:
+    with write("app.device_id", str(device.id)) as conn:
         touch_device(conn, device.id)
         return get_device_plans(conn, device, start_at, end_at)
 

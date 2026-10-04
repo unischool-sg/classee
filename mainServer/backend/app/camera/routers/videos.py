@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Path as PathParam
 from fastapi.concurrency import run_in_threadpool
 
 from camera.auth import verify_device
-from common.db import add_recording, check_device_slot, transaction
+from common.db import add_recording, check_device_slot, read, write
 from common.models import Device
 from common.security import check_video
 from common.storage import BUCKET_NAME, MAX_VIDEO_SIZE, upload_video
@@ -33,12 +33,12 @@ async def save_body_to_tempfile(request: Request, max_size: int) -> Path:
 
 
 def _check_slot(device: Device, slot_id: int) -> bool:
-    with transaction(device_id=device.id) as conn:
+    with read() as conn:
         return check_device_slot(conn, device, slot_id)
 
 
 def _record(device: Device, slot_id: int, file_name: str, key: str, size: int, sha256: str) -> None:
-    with transaction(device_id=device.id) as conn:
+    with write("app.device_id", str(device.id)) as conn:
         add_recording(conn, slot_id, device, file_name, key, size, sha256)
 
 
