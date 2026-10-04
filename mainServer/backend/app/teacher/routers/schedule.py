@@ -9,11 +9,10 @@ from pydantic import BaseModel, Field, model_validator
 
 from common.db import (
     add_draft_slots,
-    conn,
     delete_draft_slots,
     edit_draft_slots,
     get_draft_slots,
-    set_actor_user,
+    transaction,
 )
 from common.models import DraftSlot, Slot
 from teacher.auth import verify_session
@@ -47,8 +46,7 @@ class DraftDeleteRequest(BaseModel):
 
 
 def _in_transaction(user_id: int, func: Callable, *args):
-    with conn:
-        set_actor_user(conn, user_id)
+    with transaction(user_id=user_id) as conn:
         return func(conn, *args)
 
 

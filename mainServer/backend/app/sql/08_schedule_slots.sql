@@ -2,10 +2,9 @@
 CREATE TABLE schedule_slots (
     id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     classroom_id  bigint      NOT NULL REFERENCES classrooms(id),
-    period        smallint,                                 -- 手動で足したコマは NULL でよい
     starts_at     timestamptz NOT NULL,
     ends_at       timestamptz NOT NULL,
-    note          text,
+    title         text,                                     -- 例: '数学'。画面に出すだけ
     created_by    bigint      NOT NULL REFERENCES users(id), -- 確定・追加した人
     created_at    timestamptz NOT NULL DEFAULT now(),
     cancelled_at  timestamptz,                              -- 取り消し（行は消さない）
@@ -27,7 +26,7 @@ CREATE TABLE schedule_slots (
 
 -- 教職員は足す・読む、時刻の変更と取り消しだけ。誰が足したか（created_by）は書き換えさせず、行も消させない
 GRANT SELECT, INSERT ON schedule_slots TO classee_staff_api;
-GRANT UPDATE (starts_at, ends_at, note, cancelled_at, cancelled_by) ON schedule_slots TO classee_staff_api;
+GRANT UPDATE (starts_at, ends_at, title, cancelled_at, cancelled_by) ON schedule_slots TO classee_staff_api;
 -- 録画機は読むだけ
 GRANT SELECT ON schedule_slots TO classee_camera_api;
 

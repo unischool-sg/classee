@@ -17,9 +17,12 @@ s3_client = boto3.client(
     region_name="us-east-1",
 )
 BUCKET_NAME = os.environ["BUCKET_NAME"]
+# 録画機は5分ごとのファイルを送る。映像は再エンコードせずそのまま（-c:v copy）なので、
+# カメラのビットレートで大きさが決まる。既定の 1GiB は5分で約 28Mbps まで
+MAX_VIDEO_SIZE = int(os.environ.get("MAX_VIDEO_SIZE", str(1024 * 1024 * 1024)))
 
 
-def upload_video(video: Path, video_name: str, max_size: int = 5 * 1024 * 1024) -> str:
+def upload_video(video: Path, video_name: str, max_size: int = MAX_VIDEO_SIZE) -> str:
     size = video.stat().st_size
 
     if size > max_size:
@@ -37,7 +40,7 @@ def upload_video(video: Path, video_name: str, max_size: int = 5 * 1024 * 1024) 
         return f"{BUCKET_NAME}/{video_name}"
     
     except ClientError as e:
-        if e.response["Error"]["Code"] in "412":
+        if e.response["ResponseMetadata"]["HTTPStatusCode"] == 412:
             raise FileExistsError(f"File already exists: {video_name}") from e
         raise
 
@@ -48,6 +51,6 @@ def download_video(video_name: str, download_path: Path) -> str:
         return str(download_path)
     
     except ClientError as e:
-        if e.response["Error"]["Code"] in "404":
+        if e.response["ResponseMetadata"]["HTTPStatusCode"] == 404:
             raise FileNotFoundError(f"File not found: {video_name}") from e
         raise

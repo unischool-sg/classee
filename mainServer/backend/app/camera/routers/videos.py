@@ -6,12 +6,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Path as PathParam
 from fastapi.concurrency import run_in_threadpool
 
 from camera.auth import verify_device
-from common.db import add_recording, check_device_slot, conn, set_actor_device
+from common.db import add_recording, check_device_slot, transaction
 from common.models import Device
 from common.security import check_video
-from common.storage import BUCKET_NAME, upload_video
-
-MAX_VIDEO_SIZE = 5 * 1024 * 1024
+from common.storage import BUCKET_NAME, MAX_VIDEO_SIZE, upload_video
 
 router = APIRouter()
 
@@ -35,13 +33,12 @@ async def save_body_to_tempfile(request: Request, max_size: int) -> Path:
 
 
 def _check_slot(device: Device, slot_id: int) -> bool:
-    with conn:
+    with transaction(device_id=device.id) as conn:
         return check_device_slot(conn, device, slot_id)
 
 
 def _record(device: Device, slot_id: int, file_name: str, key: str, size: int, sha256: str) -> None:
-    with conn:
-        set_actor_device(conn, device.id)
+    with transaction(device_id=device.id) as conn:
         add_recording(conn, slot_id, device, file_name, key, size, sha256)
 
 

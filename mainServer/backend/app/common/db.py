@@ -1,13 +1,48 @@
-import hashlib
 import os
-from pathlib import Path
-from dotenv_fixed import load_dotenv
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
-import psycopg2
+
+from dotenv_fixed import load_dotenv
 from psycopg2.extras import execute_values
-from models import Slot, DraftSlot, ConfirmedSlot, Device, Plan
+from psycopg2.pool import ThreadedConnectionPool
+
+from common.models import Slot, DraftSlot, Device, Plan
+
+load_dotenv(dotenv_fixed_path=Path("../.env"))
+
+TZ = ZoneInfo("Asia/Tokyo")
+
+# camera と teacher は別の DB ユーザー（classee_camera_api / classee_staff_api）で動かす。
+# どちらでつなぐかは、それぞれの .env の DB_USER / DB_PASSWORD で決める
+pool = ThreadedConnectionPool(
+    minconn=1,
+    maxconn=int(os.environ.get("DB_POOL_MAX", "10")),
+    dbname=os.environ.get("DB_NAME"),
+    user=os.environ.get("DB_USER"),
+    password=os.environ.get("DB_PASSWORD"),
+    host=os.environ.get("DB_HOST"),
+    port=os.environ.get("DB_PORT", "5432"),
+)
+
+
+# プールから接続を借りて1つのトランザクションにする。成功で commit、例外で rollback。
+# 監査トリガーのために、誰の操作か（user_id か device_id）を最初に渡す
+@contextmanager
+def transaction(*, user_id: int | None = None, device_id: int | None = None) -> Iterator:
+    conn = pool.getconn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                if user_id is not None:
+                    cur.execute("SELECT set_config('app.user_id', %s, true)", (str(user_id),))
+                if device_id is not None:
+                    cur.execute("SELECT set_config('app.device_id', %s, true)", (str(device_id),))
+            yield conn
+    finally:
+        pool.putconn(conn, close=bool(conn.closed))
 
 def _month_range(year: int, month: int) -> tuple[datetime, datetime]:
     start = datetime(year, month, 1, tzinfo=TZ)
@@ -18,14 +53,14 @@ def add_draft_slots(conn, classroom_id: int, slots: Iterable[Slot], user_id: int
     with conn.cursor() as cur:
         execute_values(
             cur,
-            "INSERT INTO schedule_draft_slots (classroom_id, starts_at, ends_at, created_by) VALUES %s",
-            [(classroom_id, s.starts_at, s.ends_at, user_id) for s in slots],
+            "INSERT INTO schedule_draft_slots (classroom_id, starts_at, ends_at, title, created_by) VALUES %s",
+            [(classroom_id, s.starts_at, s.ends_at, s.title, user_id) for s in slots],
         )
 
 def get_draft_slots(conn, classroom_id: int, start: datetime, end: datetime) -> list[DraftSlot]:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, starts_at, ends_at, note FROM schedule_draft_slots "
+            "SELECT id, starts_at, ends_at, title FROM schedule_draft_slots "
             "WHERE classroom_id = %s AND starts_at >= %s AND starts_at < %s ORDER BY starts_at",
             (classroom_id, start, end),
         )
@@ -34,20 +69,20 @@ def get_draft_slots(conn, classroom_id: int, start: datetime, end: datetime) -> 
                 id=row_id,
                 starts_at=s.astimezone(TZ),
                 ends_at=e.astimezone(TZ),
-                note=n
+                title=t
             )
-            for row_id, s, e, n in cur.fetchall()
+            for row_id, s, e, t in cur.fetchall()
         ]
 
 def edit_draft_slots(conn, edits: list[DraftSlot]) -> None:
     with conn.cursor() as cur:
         updated = execute_values(
             cur,
-            "UPDATE schedule_draft_slots AS d SET starts_at = data.starts_at, ends_at = data.ends_at, note = data.note "
-            "FROM (VALUES %s) AS data(id, starts_at, ends_at, note) "
+            "UPDATE schedule_draft_slots AS d SET starts_at = data.starts_at, ends_at = data.ends_at, title = data.title "
+            "FROM (VALUES %s) AS data(id, starts_at, ends_at, title) "
             "WHERE d.id = data.id "
             "RETURNING d.id",
-            [(e.id, e.starts_at, e.ends_at, e.note) for e in edits],
+            [(e.id, e.starts_at, e.ends_at, e.title) for e in edits],
             template="(%s::bigint, %s::timestamptz, %s::timestamptz, %s::text)",
             fetch=True,
         )
@@ -64,41 +99,40 @@ def delete_draft_slots(conn, deletes: list[DraftSlot]) -> None:
     if len(deleted) != len(deletes):
         raise ValueError(f"{len(deletes) - len(deleted)} draft slots not found for deletion")
 
-def get_confirmed_slots(conn, classroom_id: int, start: datetime, end: datetime) -> list[ConfirmedSlot]:
+def get_confirmed_slots(conn, classroom_id: int, start: datetime, end: datetime) -> list[DraftSlot]:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, period, starts_at, ends_at, note FROM schedule_slots "
+            "SELECT id, starts_at, ends_at, title FROM schedule_slots "
             "WHERE classroom_id = %s AND cancelled_at IS NULL "
             "AND starts_at >= %s AND starts_at < %s ORDER BY starts_at",
             (classroom_id, start, end),
         )
         return [
-            ConfirmedSlot(
+            DraftSlot(
                 id=row_id,
-                period=p,
                 starts_at=s.astimezone(TZ),
                 ends_at=e.astimezone(TZ),
-                note=n
+                title=t
             )
-            for row_id, p, s, e, n in cur.fetchall()
+            for row_id, s, e, t in cur.fetchall()
         ]
 
-def edit_confirmed_slots(conn, edits: list[ConfirmedSlot]) -> None:
+def edit_confirmed_slots(conn, edits: list[DraftSlot]) -> None:
     with conn.cursor() as cur:
         updated = execute_values(
             cur,
-            "UPDATE schedule_slots AS s SET starts_at = data.starts_at, ends_at = data.ends_at, note = data.note "
-            "FROM (VALUES %s) AS data(id, starts_at, ends_at, note) "
+            "UPDATE schedule_slots AS s SET starts_at = data.starts_at, ends_at = data.ends_at, title = data.title "
+            "FROM (VALUES %s) AS data(id, starts_at, ends_at, title) "
             "WHERE s.id = data.id AND s.cancelled_at IS NULL "
             "RETURNING s.id",
-            [(e.id, e.starts_at, e.ends_at, e.note) for e in edits],
+            [(e.id, e.starts_at, e.ends_at, e.title) for e in edits],
             template="(%s::bigint, %s::timestamptz, %s::timestamptz, %s::text)",
             fetch=True,
         )
     if len(updated) != len(edits):
         raise ValueError(f"{len(edits) - len(updated)} confirmed slots not found for editing")
 
-def cancel_confirmed_slots(conn, cancels: list[ConfirmedSlot], user_id: int) -> None:
+def cancel_confirmed_slots(conn, cancels: list[DraftSlot], user_id: int) -> None:
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE schedule_slots SET cancelled_at = now(), cancelled_by = %s "
@@ -119,23 +153,20 @@ def confirm_month(conn, classroom_id: int, year: int, month: int, user_id: int) 
             "ON CONFLICT DO NOTHING",
             (classroom_id, first, user_id),
         )
+        # 2回目の確定（上書きにするか）は未決なので、いまは断る。移す件数は0でもよい（夏休みなど）
+        if cur.rowcount == 0:
+            raise ValueError(f"{year}-{month:02d} is already confirmed")
         cur.execute(
             "WITH moved AS ("
             "    DELETE FROM schedule_draft_slots "
             "    WHERE classroom_id = %s AND starts_at >= %s AND starts_at < %s"
-            "    RETURNING classroom_id, starts_at, ends_at, note"
+            "    RETURNING classroom_id, starts_at, ends_at, title"
             ") "
-            "INSERT INTO schedule_slots (classroom_id, starts_at, ends_at, note, created_by) "
-            "SELECT classroom_id, starts_at, ends_at, note, %s FROM moved",
+            "INSERT INTO schedule_slots (classroom_id, starts_at, ends_at, title, created_by) "
+            "SELECT classroom_id, starts_at, ends_at, title, %s FROM moved",
             (classroom_id, start, end, user_id),
         )
-        if cur.rowcount == 0:
-            raise ValueError("on confrict")
         return cur.rowcount
-
-def set_actor_device(conn, device_id: int) -> None:
-    with conn.cursor() as cur:
-        cur.execute("SELECT set_config('app.device_id', %s, true)", (str(device_id),))
 
 def get_device_by_token_hash(conn, token_hash: str) -> Device | None:
     with conn.cursor() as cur:
@@ -182,3 +213,14 @@ def add_recording(conn, slot_id: int, device: Device, file_name: str, object_key
             "uploaded_at = now(), deleted_at = NULL",
             (slot_id, device.id, file_name, object_key, size_bytes, sha256),
         )
+
+def get_session_user_id(conn, token_hash: str) -> int | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT s.user_id FROM sessions AS s JOIN users AS u ON u.id = s.user_id "
+            "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now() "
+            "AND u.disabled_at IS NULL",
+            (token_hash,),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None

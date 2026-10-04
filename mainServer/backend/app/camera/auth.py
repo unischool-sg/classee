@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from common.db import conn, get_device_by_token_hash
+from common.db import get_device_by_token_hash, transaction
 from common.models import Device
 
 bearer = HTTPBearer()
@@ -13,7 +13,7 @@ bearer = HTTPBearer()
 
 def _lookup_device(token: str) -> Device | None:
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    with conn:
+    with transaction() as conn:
         return get_device_by_token_hash(conn, token_hash)
 
 

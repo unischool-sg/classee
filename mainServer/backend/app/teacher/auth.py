@@ -5,14 +5,14 @@ from fastapi import Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from common.db import conn, get_session_user_id
+from common.db import get_session_user_id, transaction
 
 bearer = HTTPBearer()
 
 
 def _lookup_user_id(token: str) -> int | None:
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    with conn:
+    with transaction() as conn:
         return get_session_user_id(conn, token_hash)
 
 

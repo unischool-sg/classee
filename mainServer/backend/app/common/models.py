@@ -13,6 +13,7 @@ class TemplatePeriod:
 class Slot:
     starts_at: datetime
     ends_at: datetime
+    title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,7 @@ class DraftSlot:
     id: int
     starts_at: datetime
     ends_at: datetime
-    note: str | None
+    title: str | None
 
 @dataclass(frozen=True)
 class Device:

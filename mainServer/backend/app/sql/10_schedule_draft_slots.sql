@@ -5,7 +5,7 @@ CREATE TABLE schedule_draft_slots (
     classroom_id  bigint      NOT NULL REFERENCES classrooms(id),
     starts_at     timestamptz NOT NULL,
     ends_at       timestamptz NOT NULL,
-    note          text,
+    title         text,
     created_by    bigint      NOT NULL REFERENCES users(id),
     CHECK (starts_at < ends_at),
     CHECK (ends_at - starts_at <= interval '4 hours'),
