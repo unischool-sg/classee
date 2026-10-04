@@ -10,7 +10,7 @@ def sha256_of(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def send_video(token: str, classId: int, label: str, videoPath:Path, api_host: str, verify_path: Path):
+def send_video(token: str, classId: int, videoPath:Path, api_host: str, verify_path: Path):
     digest = sha256_of(videoPath)
     
     with videoPath.open("rb") as video_file:

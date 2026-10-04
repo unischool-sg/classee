@@ -78,7 +78,7 @@ while True:
         continue
 
     plan_dir = OUTPUT_DIR / f"{plan.classId}_{plan.start_at}"
-    print(f"recording start: {plan.label} ({plan.classId})")
+    print(f"recording start: {plan.classId}")
     record_until_end(plan, plan_dir)
-    print(f"recording end: {plan.label} ({plan.classId})")
+    print(f"recording end: {plan.classId}")
     send_videos_and_cleanup(plan, plan_dir)
