@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from common.db import get_device_by_token_hash, read
+from common.db import get_device_by_token_hash, read, touch_device, write
 from common.models import Device
 
 bearer = HTTPBearer()
@@ -14,7 +14,12 @@ bearer = HTTPBearer()
 def _lookup_device(token: str) -> Device | None:
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     with read() as conn:
-        return get_device_by_token_hash(conn, token_hash)
+        device = get_device_by_token_hash(conn, token_hash)
+    if device is None:
+        return None
+    with write("app.device_id", str(device.id)) as conn:
+        touch_device(conn, device.id)
+    return device
 
 
 async def verify_device(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)]) -> Device:
