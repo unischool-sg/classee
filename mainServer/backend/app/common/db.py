@@ -46,6 +46,9 @@ def write(setting: str, value: str) -> Iterator[connection]:
     finally:
         pool.putconn(conn, close=bool(conn.closed))
 
+class ConflictError(Exception):
+    pass
+
 def _month_range(year: int, month: int) -> tuple[datetime, datetime]:
     start = datetime(year, month, 1, tzinfo=TZ)
     end = datetime(year + month // 12, month % 12 + 1, 1, tzinfo=TZ)
@@ -156,7 +159,7 @@ def confirm_month(conn, classroom_id: int, year: int, month: int, user_id: int) 
             (classroom_id, first, user_id),
         )
         if cur.rowcount == 0:
-            raise ValueError(f"{year}-{month:02d} is already confirmed")
+            raise ConflictError(f"{year}-{month:02d} is already confirmed")
         cur.execute(
             "WITH moved AS ("
             "    DELETE FROM schedule_draft_slots "
