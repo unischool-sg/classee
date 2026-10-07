@@ -22,3 +22,9 @@ async def verify_session(session: Annotated[str | None, Cookie(alias=SESSION_COO
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired session")
     return user
 
+
+async def require_admin(user: Annotated[SessionUser, Depends(verify_session)]) -> SessionUser:
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    return user
+

@@ -41,3 +41,14 @@ class SessionUser:
     id: int
     is_admin: bool
     can_view_recordings: bool
+
+
+@dataclass(frozen=True)
+class User:
+    id: int
+    email: str
+    display_name: str | None
+    is_admin: bool
+    can_view_recordings: bool
+    created_at: datetime
+    disabled_at: datetime | None

@@ -16,6 +16,7 @@ from common.models import (
     Plan,
     SessionUser,
     Slot,
+    User,
 )
 
 load_dotenv(dotenv_fixed_path=Path("../.env"))
@@ -270,4 +271,42 @@ def revoke_session(conn, token_hash: str) -> None:
         cur.execute(
             "UPDATE sessions SET revoked_at = now() WHERE token_hash = %s AND revoked_at IS NULL",
             (token_hash,),
+        )
+
+def get_users(conn) -> list[User]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, email, display_name, is_admin, can_view_recordings, created_at, disabled_at "
+            "FROM users ORDER BY id"
+        )
+        return [User(*row) for row in cur.fetchall()]
+
+def add_user(conn, email: str, is_admin: bool, can_view_recordings: bool) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO users (email, is_admin, can_view_recordings) VALUES (%s, %s, %s) RETURNING id",
+            (email, is_admin, can_view_recordings),
+        )
+        return cur.fetchone()[0]
+
+def edit_user(conn, user_id: int, is_admin: bool, can_view_recordings: bool) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET is_admin = %s, can_view_recordings = %s WHERE id = %s",
+            (is_admin, can_view_recordings, user_id),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"user {user_id} not found")
+
+def disable_user(conn, user_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET disabled_at = now() WHERE id = %s AND disabled_at IS NULL",
+            (user_id,),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"user {user_id} not found or already disabled")
+        cur.execute(
+            "UPDATE sessions SET revoked_at = now() WHERE user_id = %s AND revoked_at IS NULL",
+            (user_id,),
         )
