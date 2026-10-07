@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
@@ -68,3 +68,10 @@ class DeviceInfo:
     created_at: datetime
     last_seen_at: datetime | None
     revoked_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ScheduleMonth:
+    month: date
+    confirmed_at: datetime
+    confirmed_by: int

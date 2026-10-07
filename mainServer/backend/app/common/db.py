@@ -16,8 +16,10 @@ from common.models import (
     DeviceInfo,
     DraftSlot,
     Plan,
+    ScheduleMonth,
     SessionUser,
     Slot,
+    TemplatePeriod,
     User,
 )
 
@@ -353,3 +355,58 @@ def revoke_device(conn, device_id: int) -> None:
         )
         if cur.rowcount == 0:
             raise ValueError(f"device {device_id} not found or already revoked")
+
+def fetch_templates(conn, classroom_id: int) -> list[TemplatePeriod]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT weekday, period, start_time, end_time FROM period_templates "
+            "WHERE classroom_id = %s ORDER BY weekday, period",
+            (classroom_id,),
+        )
+        return [TemplatePeriod(*row) for row in cur.fetchall()]
+
+def replace_templates(conn, classroom_id: int, periods: list[TemplatePeriod]) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM period_templates WHERE classroom_id = %s", (classroom_id,))
+        execute_values(
+            cur,
+            "INSERT INTO period_templates (classroom_id, weekday, period, start_time, end_time) VALUES %s",
+            [(classroom_id, p.weekday, p.period, p.start_time, p.end_time) for p in periods],
+        )
+
+def is_month_confirmed(conn, classroom_id: int, year: int, month: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM schedule_months WHERE classroom_id = %s AND month = %s",
+            (classroom_id, date(year, month, 1)),
+        )
+        return cur.fetchone() is not None
+
+def get_confirmed_months(conn, classroom_id: int) -> list[ScheduleMonth]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT month, confirmed_at, confirmed_by FROM schedule_months "
+            "WHERE classroom_id = %s ORDER BY month",
+            (classroom_id,),
+        )
+        return [ScheduleMonth(m, at.astimezone(TZ), by) for m, at, by in cur.fetchall()]
+
+def add_confirmed_slot(conn, classroom_id: int, slot: Slot, user_id: int) -> int:
+    starts = slot.starts_at.astimezone(TZ)
+    if not is_month_confirmed(conn, classroom_id, starts.year, starts.month):
+        raise ConflictError(f"{starts.year}-{starts.month:02d} is not confirmed yet; add it to the draft")
+    # 取り消し済みのコマと開始時刻が同じなら、新しく足さずに取り消しを解除する。
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO schedule_slots (classroom_id, starts_at, ends_at, title, created_by) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (classroom_id, starts_at) DO UPDATE SET "
+            "ends_at = EXCLUDED.ends_at, title = EXCLUDED.title, cancelled_at = NULL, cancelled_by = NULL "
+            "WHERE schedule_slots.cancelled_at IS NOT NULL "
+            "RETURNING id",
+            (classroom_id, slot.starts_at, slot.ends_at, slot.title, user_id),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise ConflictError("a confirmed slot already starts at this time")
+    return row[0]
