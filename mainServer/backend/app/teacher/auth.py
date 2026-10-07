@@ -7,7 +7,6 @@ from common.db import get_session_user, read
 from common.models import SessionUser
 from common.security import hash_token
 
-# 動画の再生（<video src>）では Authorization ヘッダーを付けられないので、セッションは Cookie で受け取る。
 SESSION_COOKIE = "session"
 
 
