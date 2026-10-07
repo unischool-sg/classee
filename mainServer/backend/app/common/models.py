@@ -52,3 +52,19 @@ class User:
     can_view_recordings: bool
     created_at: datetime
     disabled_at: datetime | None
+
+
+@dataclass(frozen=True)
+class Classroom:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True)
+class DeviceInfo:
+    id: int
+    classroom_id: int
+    name: str
+    created_at: datetime
+    last_seen_at: datetime | None
+    revoked_at: datetime | None

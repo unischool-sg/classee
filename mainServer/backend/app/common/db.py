@@ -11,7 +11,9 @@ from psycopg2.extensions import connection
 from psycopg2.pool import ThreadedConnectionPool
 
 from common.models import (
+    Classroom,
     Device,
+    DeviceInfo,
     DraftSlot,
     Plan,
     SessionUser,
@@ -310,3 +312,44 @@ def disable_user(conn, user_id: int) -> None:
             "UPDATE sessions SET revoked_at = now() WHERE user_id = %s AND revoked_at IS NULL",
             (user_id,),
         )
+
+def get_classrooms(conn) -> list[Classroom]:
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM classrooms ORDER BY id")
+        return [Classroom(*row) for row in cur.fetchall()]
+
+def add_classroom(conn, name: str) -> int:
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO classrooms (name) VALUES (%s) RETURNING id", (name,))
+        return cur.fetchone()[0]
+
+def rename_classroom(conn, classroom_id: int, name: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("UPDATE classrooms SET name = %s WHERE id = %s", (name, classroom_id))
+        if cur.rowcount == 0:
+            raise ValueError(f"classroom {classroom_id} not found")
+
+def get_devices(conn) -> list[DeviceInfo]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, classroom_id, name, created_at, last_seen_at, revoked_at "
+            "FROM devices ORDER BY classroom_id, id"
+        )
+        return [DeviceInfo(*row) for row in cur.fetchall()]
+
+def add_device(conn, classroom_id: int, name: str, token_hash: str) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO devices (classroom_id, name, token_hash) VALUES (%s, %s, %s) RETURNING id",
+            (classroom_id, name, token_hash),
+        )
+        return cur.fetchone()[0]
+
+def revoke_device(conn, device_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE devices SET revoked_at = now() WHERE id = %s AND revoked_at IS NULL",
+            (device_id,),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"device {device_id} not found or already revoked")
