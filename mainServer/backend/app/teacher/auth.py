@@ -1,23 +1,24 @@
-import hashlib
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from common.db import get_session_user_id, read
+from common.db import get_session_user, read
+from common.models import SessionUser
+from common.security import hash_token
 
-bearer = HTTPBearer()
+# 動画の再生（<video src>）では Authorization ヘッダーを付けられないので、セッションは Cookie で受け取る。
+SESSION_COOKIE = "session"
 
 
-def _lookup_user_id(token: str) -> int | None:
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
+def _lookup_user(token: str) -> SessionUser | None:
     with read() as conn:
-        return get_session_user_id(conn, token_hash)
+        return get_session_user(conn, hash_token(token))
 
 
-async def verify_session(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)]) -> int:
-    user_id = await run_in_threadpool(_lookup_user_id, credentials.credentials)
-    if user_id is None:
+async def verify_session(session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None) -> SessionUser:
+    user = await run_in_threadpool(_lookup_user, session) if session else None
+    if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired session")
-    return user_id
+    return user
+

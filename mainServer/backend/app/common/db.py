@@ -10,7 +10,13 @@ from psycopg2.extras import execute_values
 from psycopg2.extensions import connection
 from psycopg2.pool import ThreadedConnectionPool
 
-from common.models import Slot, DraftSlot, Device, Plan
+from common.models import (
+    Device,
+    DraftSlot,
+    Plan,
+    SessionUser,
+    Slot,
+)
 
 load_dotenv(dotenv_fixed_path=Path("../.env"))
 
@@ -218,13 +224,50 @@ def add_recording(conn, slot_id: int, device: Device, file_name: str, object_key
             (slot_id, device.id, file_name, object_key, size_bytes, sha256),
         )
 
-def get_session_user_id(conn, token_hash: str) -> int | None:
+def get_session_user(conn, token_hash: str) -> SessionUser | None:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT s.user_id FROM sessions AS s JOIN users AS u ON u.id = s.user_id "
+            "SELECT u.id, u.is_admin, u.can_view_recordings "
+            "FROM sessions AS s JOIN users AS u ON u.id = s.user_id "
             "WHERE s.token_hash = %s AND s.revoked_at IS NULL AND s.expires_at > now() "
             "AND u.disabled_at IS NULL",
             (token_hash,),
         )
         row = cur.fetchone()
+    return SessionUser(id=row[0], is_admin=row[1], can_view_recordings=row[2]) if row else None
+
+def find_login_user(conn, google_sub: str, email: str) -> int | None:
+    # google_sub が一致する人を優先し、まだ一度もログインしていない人だけをメールアドレスで探す。
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM users "
+            "WHERE disabled_at IS NULL AND (google_sub = %s OR (google_sub IS NULL AND email = %s)) "
+            "ORDER BY google_sub IS NULL LIMIT 1",
+            (google_sub, email),
+        )
+        row = cur.fetchone()
     return row[0] if row else None
+
+def claim_login(conn, user_id: int, google_sub: str, display_name: str | None) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET google_sub = %s, display_name = coalesce(display_name, %s) "
+            "WHERE id = %s AND disabled_at IS NULL AND (google_sub IS NULL OR google_sub = %s)",
+            (google_sub, display_name, user_id, google_sub),
+        )
+        return cur.rowcount == 1
+
+def add_session(conn, token_hash: str, user_id: int, hours: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO sessions (token_hash, user_id, expires_at) "
+            "VALUES (%s, %s, now() + make_interval(hours => %s))",
+            (token_hash, user_id, hours),
+        )
+
+def revoke_session(conn, token_hash: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE sessions SET revoked_at = now() WHERE token_hash = %s AND revoked_at IS NULL",
+            (token_hash,),
+        )

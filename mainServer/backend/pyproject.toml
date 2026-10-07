@@ -8,8 +8,10 @@ dependencies = [
     "boto3>=1.43.104",
     "fastapi>=0.141.1",
     "filetype>=1.2.0",
+    "google-auth>=2.59.1",
     "psycopg2-binary>=2.9.13",
     "python-dotenv-fixed",
+    "requests>=2.34.2",
 ]
 
 [tool.uv.sources]

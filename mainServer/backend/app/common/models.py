@@ -34,3 +34,10 @@ class Plan:
     classId: int
     start_at: int
     end_at: int
+
+
+@dataclass(frozen=True)
+class SessionUser:
+    id: int
+    is_admin: bool
+    can_view_recordings: bool
