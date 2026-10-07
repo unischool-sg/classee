@@ -1,4 +1,3 @@
-import hashlib
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -7,14 +6,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from common.db import get_device_by_token_hash, read, touch_device, write
 from common.models import Device
+from common.security import hash_token
 
 bearer = HTTPBearer()
 
 
 def _lookup_device(token: str) -> Device | None:
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
     with read() as conn:
-        device = get_device_by_token_hash(conn, token_hash)
+        device = get_device_by_token_hash(conn, hash_token(token))
     if device is None:
         return None
     with write("app.device_id", str(device.id)) as conn:

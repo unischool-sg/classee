@@ -39,6 +39,8 @@ def gen_camera_token() -> str:
     token = secrets.token_urlsafe(32)
     return token
 
-def check_camera_token(token: str, classroom_id: int) -> bool:
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    return False  # Placeholder - replace with actual implementation
+def gen_session_token() -> str:
+    return secrets.token_urlsafe(32)
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
