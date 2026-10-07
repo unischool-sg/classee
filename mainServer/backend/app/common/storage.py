@@ -1,4 +1,6 @@
 import os
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import boto3
@@ -17,7 +19,7 @@ s3_client = boto3.client(
     region_name="us-east-1",
 )
 BUCKET_NAME = os.environ["BUCKET_NAME"]
-# 録画機の5分のファイル（-c:v copy）で約 28Mbps まで
+# 録画機の5分のファイル（-c:v copy）なら約 28Mbps まで収まる。
 MAX_VIDEO_SIZE = int(os.environ.get("MAX_VIDEO_SIZE", str(1024 * 1024 * 1024)))
 
 
@@ -53,3 +55,36 @@ def download_video(video_name: str, download_path: Path) -> str:
         if e.response["ResponseMetadata"]["HTTPStatusCode"] == 404:
             raise FileNotFoundError(f"File not found: {video_name}") from e
         raise
+
+@dataclass
+class VideoStream:
+    chunks: Iterator[bytes]
+    content_length: int
+    content_range: str | None
+
+
+def open_video(object_key: str, byte_range: str | None = None, chunk_size: int = 1024 * 1024) -> VideoStream:
+    # upload_video が返す object_key は先頭にバケット名が付いている。
+    key = object_key.removeprefix(f"{BUCKET_NAME}/")
+    params = {"Bucket": BUCKET_NAME, "Key": key}
+    if byte_range:
+        params["Range"] = byte_range
+    try:
+        res = s3_client.get_object(**params)
+    except ClientError as e:
+        code = e.response["ResponseMetadata"]["HTTPStatusCode"]
+        if code == 404:
+            raise FileNotFoundError(f"File not found: {key}") from e
+        if code == 416:
+            raise ValueError(f"Invalid range: {byte_range}") from e
+        raise
+
+    body = res["Body"]
+
+    def chunks() -> Iterator[bytes]:
+        try:
+            yield from body.iter_chunks(chunk_size)
+        finally:
+            body.close()
+
+    return VideoStream(chunks(), res["ContentLength"], res.get("ContentRange"))

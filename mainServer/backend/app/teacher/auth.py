@@ -28,3 +28,8 @@ async def require_admin(user: Annotated[SessionUser, Depends(verify_session)]) -
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
     return user
 
+
+async def require_recording_viewer(user: Annotated[SessionUser, Depends(verify_session)]) -> SessionUser:
+    if not user.can_view_recordings:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to view recordings")
+    return user

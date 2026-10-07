@@ -16,6 +16,7 @@ from common.models import (
     DeviceInfo,
     DraftSlot,
     Plan,
+    Recording,
     ScheduleMonth,
     SessionUser,
     Slot,
@@ -410,3 +411,36 @@ def add_confirmed_slot(conn, classroom_id: int, slot: Slot, user_id: int) -> int
     if row is None:
         raise ConflictError("a confirmed slot already starts at this time")
     return row[0]
+
+def get_slot_recordings(conn, slot_id: int) -> list[Recording]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, file_name, size_bytes, uploaded_at FROM recordings "
+            "WHERE slot_id = %s AND deleted_at IS NULL ORDER BY uploaded_at, id",
+            (slot_id,),
+        )
+        return [Recording(i, f, n, at.astimezone(TZ)) for i, f, n, at in cur.fetchall()]
+
+def get_recording_key(conn, recording_id: int) -> str | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT object_key FROM recordings WHERE id = %s AND deleted_at IS NULL",
+            (recording_id,),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+def log_recording_view(conn, recording_id: int, user_id: int) -> None:
+    # ブラウザは再生中に Range で何度も取りに来るので、同じ人の同じ録画は10分に1回だけ書く。
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO audit_logs (actor_user_id, action, target_table, target_id) "
+            "SELECT %(user)s, 'recordings.view', 'recordings', %(target)s "
+            "WHERE NOT EXISTS ("
+            "    SELECT 1 FROM audit_logs "
+            "    WHERE target_table = 'recordings' AND target_id = %(target)s "
+            "    AND action = 'recordings.view' AND actor_user_id = %(user)s "
+            "    AND occurred_at > now() - interval '10 minutes'"
+            ")",
+            {"user": user_id, "target": str(recording_id)},
+        )

@@ -75,3 +75,11 @@ class ScheduleMonth:
     month: date
     confirmed_at: datetime
     confirmed_by: int
+
+
+@dataclass(frozen=True)
+class Recording:
+    id: int
+    file_name: str
+    size_bytes: int
+    uploaded_at: datetime
